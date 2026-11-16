@@ -1,0 +1,40 @@
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Python bytecode & packaging
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+
+# Test, lint & typecheck caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Temporary / scratch / atomic write files
+.tmp*
+*.tmp
+*.bak
+*.swp
+*.log
+
+# Dataset caches, checkpoints & raw per-worker shard dumps
+outputs/**/cache/
+outputs/**/shards/
+*.npz
+*.pth
+*.pt
+
+# OS metadata
+.DS_Store
