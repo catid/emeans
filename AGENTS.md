@@ -21,3 +21,10 @@ Do not rely solely on a single pre-launch check:
 
 - **Parallel periodic audits**: Continuously run independent bug checks, regression tests, and adversarial randomized shape/dtype probes in parallel alongside ongoing development and long-running experiments.
 - **Live output & log validation**: Periodically audit active experiment logs and newly written `outputs/**/*.json` artifacts in parallel for Python tracebacks, stalled shards, `NaN`/`Inf` values, schema/key errors, or metric anomalies.
+
+### 4. Store All Data, Caches, and Scratch Files on `/home`
+Root `/` disks on workstations and bare-metal servers (including `/tmp` and `/var/tmp`) are OS partitions not meant for datasets, environments, smoke outputs, or Triton/compiler caches:
+
+- **Local `foureyes`**: Keep all datasets, `.venv`, and outputs under `/home/catid/emeans/...` and place all scratch files, smoke/fuzz runs, `TMPDIR`, and isolated `TRITON_CACHE_DIR` directories strictly under `/home/catid/.cache/emeans_tmp/...` (never `/tmp` or `/var/tmp`).
+- **Remote fleet servers (`ripper`, `loki`, `work`, `acorn.stratabaremetal.com`, `cashew.stratabaremetal.com`)**: Keep all virtualenvs, datasets, logs, `TMPDIR`, and per-shard `TRITON_CACHE_DIR` directories strictly under `/home/catid/emeans_env/...` (e.g., `TMPDIR=/home/catid/emeans_env/tmp` and `TRITON_CACHE_DIR=/home/catid/emeans_env/tmp/triton_cache_${SESSION}`) and `/home/catid/emeans_runs/...`.
+- **Socket & host safety**: Never delete `/tmp/ssh-*` (forwarded `SSH_AUTH_SOCK` sockets), `/tmp/tmux-*`, or non-`emeans` files; never modify `tmux` session `0`; and never access off-limits `walnut.stratabaremetal.com`.

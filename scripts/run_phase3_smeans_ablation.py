@@ -57,11 +57,17 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-# Isolate Triton's disk cache per (uid, visible_gpu) BEFORE importing torch/triton/emeans
+# Isolate Triton's disk cache per (uid, visible_gpu) under /home BEFORE importing torch/triton/emeans
 # so concurrent multi-GPU processes never collide on shared `$HOME/.triton/cache`.
 if "TRITON_CACHE_DIR" not in os.environ:
     _vis_gpu_tag = os.environ.get("CUDA_VISIBLE_DEVICES", "all").replace(",", "_")
-    os.environ["TRITON_CACHE_DIR"] = f"/tmp/triton_cache_emeans_u{os.getuid()}_g{_vis_gpu_tag}"
+    _base_tmp = (
+        "/home/catid/emeans_env/tmp"
+        if os.path.isdir("/home/catid/emeans_env")
+        else os.path.expanduser("~/.cache/emeans_tmp")
+    )
+    os.makedirs(_base_tmp, exist_ok=True)
+    os.environ["TRITON_CACHE_DIR"] = f"{_base_tmp}/triton_cache_emeans_u{os.getuid()}_g{_vis_gpu_tag}"
 
 import matplotlib
 matplotlib.use("Agg")
@@ -1766,7 +1772,7 @@ def dispatch_fleet_14way(
     for idx, host, gpu_id, session in remote_entries:
         remote_out = f"{REMOTE_WORKDIR}/{rel_out}"
         remote_cmd = (
-            f"mkdir -p {REMOTE_WORKDIR}/outputs/logs {remote_out}/shards && "
+            f"mkdir -p /home/catid/emeans_env/tmp {REMOTE_WORKDIR}/outputs/logs {remote_out}/shards && "
             f"rm -f {REMOTE_WORKDIR}/outputs/logs/{session}.status "
             f"{remote_out}/shards/records_shard_{idx:02d}_of_{num_shards:02d}.json && "
             f"tmux kill-session -t {session} 2>/dev/null || true; "
@@ -1774,7 +1780,8 @@ def dispatch_fleet_14way(
             + shlex.quote(
                 f"export PATH=\"$HOME/.local/bin:/usr/local/cuda/bin:$PATH\"; "
                 f"export CUDA_VISIBLE_DEVICES={gpu_id}; "
-                f"export TRITON_CACHE_DIR=/tmp/triton_cache_{session}; "
+                f"export TMPDIR=/home/catid/emeans_env/tmp; "
+                f"export TRITON_CACHE_DIR=/home/catid/emeans_env/tmp/triton_cache_{session}; "
                 f"export PYTHONPATH={REMOTE_WORKDIR}/src; "
                 f"cd {REMOTE_WORKDIR} && "
                 f"{REMOTE_PYTHON} scripts/run_phase3_smeans_ablation.py "
@@ -1797,13 +1804,16 @@ def dispatch_fleet_14way(
     local_procs: list[tuple[int, int, subprocess.Popen[Any], Any]] = []
     local_logs_dir = out_dir / "logs"
     local_logs_dir.mkdir(parents=True, exist_ok=True)
+    local_tmp_dir = Path.home() / ".cache" / "emeans_tmp"
+    local_tmp_dir.mkdir(parents=True, exist_ok=True)
     try:
         for idx, _, gpu_id, session in local_entries:
             local_shard_json = shards_dir / f"records_shard_{idx:02d}_of_{num_shards:02d}.json"
             local_shard_json.unlink(missing_ok=True)
             local_env = env.copy()
             local_env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-            local_env["TRITON_CACHE_DIR"] = f"/tmp/triton_cache_{session}"
+            local_env["TMPDIR"] = str(local_tmp_dir)
+            local_env["TRITON_CACHE_DIR"] = str(local_tmp_dir / f"triton_cache_{session}")
             local_env["PYTHONPATH"] = str(ROOT / "src")
             log_f = open(local_logs_dir / f"{session}.log", "w", encoding="utf-8")
             print(f"[Fleet-Phase3] Launching local shard {idx:02d}/{num_shards} on foureyes GPU {gpu_id} ...", flush=True)

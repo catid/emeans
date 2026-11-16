@@ -46,12 +46,16 @@ else
 fi
 
 SSH_OPTS=(-A -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5)
+LOCAL_TMP_DIR="${HOME}/.cache/emeans_tmp"
+mkdir -p "${LOCAL_TMP_DIR}"
 
 echo "========================================================================"
 echo "LOCAL HOST:     $(hostname) (FQDN: $(hostname -f 2>/dev/null || hostname))"
 echo "IPv4:           $(ip -4 -o addr show scope global | awk '{print $2":"$4}' | tr '\n' ' ')"
 echo "Orig AUTH_SOCK: ${ORIG_SOCK}"
 echo "Live ssh-agent: ${AGENT_STATUS}"
+echo "Local Disk:     / $(df -h / | awk 'NR==2 {print $4 " avail (" $5 " used)"}'), /home $(df -h /home | awk 'NR==2 {print $4 " avail (" $5 " used)"}')"
+echo "Storage Rule:   /home ONLY (local: ~/.cache/emeans_tmp; remote: /home/catid/emeans_env/tmp)"
 echo "OFF-LIMITS:     walnut.stratabaremetal.com (excluded per user — do NOT use)"
 echo "Local GPUs:"
 nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu --format=csv,noheader 2>/dev/null | sed 's/^/  /' || echo "  no nvidia-smi"
@@ -72,6 +76,7 @@ for host in "${CANDIDATES[@]}"; do
   echo ">>> Checking ${host} <<<"
   resolved="$(getent ahosts "${host}" 2>/dev/null | awk '{print $1}' | grep -v ':' | sort -u | tr '\n' ' ' || true)"
   echo "  DNS IPv4: ${resolved:-<unresolved>}"
+  err_file="${LOCAL_TMP_DIR}/emeans_ssh_err.$$"
 
   if ssh "${SSH_OPTS[@]}" "${host}" '
     echo "  SSH:      OK (hostname=$(hostname), kernel=$(uname -r))"
@@ -81,14 +86,14 @@ for host in "${CANDIDATES[@]}"; do
       echo "  AgentFwd: INACTIVE (SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-unset})"
     fi
     echo "  Tmux:     $(tmux -V 2>/dev/null || echo missing)"
-    echo "  RAM/Disk: $(free -h | awk "/^Mem:/ {print \$7 \" avail / \" \$2 \" total\"}"), /home $(df -h /home | awk "NR==2 {print \$4 \" avail\"}")"
+    echo "  RAM/Disk: $(free -h | awk "/^Mem:/ {print \$7 \" avail / \" \$2 \" total\"}"), / $(df -h / | awk "NR==2 {print \$4 \" avail\"}"), /home $(df -h /home | awk "NR==2 {print \$4 \" avail\"}")"
     echo "  GPUs:"
     nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu --format=csv,noheader 2>/dev/null | sed "s/^/    /" || echo "    none"
-  ' 2>/tmp/emeans_ssh_err.$$; then
-    rm -f /tmp/emeans_ssh_err.$$
+  ' 2>"${err_file}"; then
+    rm -f "${err_file}"
   else
-    err_msg="$(tail -n 2 /tmp/emeans_ssh_err.$$ 2>/dev/null | tr '\r\n' ' ' || true)"
-    rm -f /tmp/emeans_ssh_err.$$
+    err_msg="$(tail -n 2 "${err_file}" 2>/dev/null | tr '\r\n' ' ' || true)"
+    rm -f "${err_file}"
     echo "  SSH:      UNREACHABLE (${err_msg})"
   fi
 done

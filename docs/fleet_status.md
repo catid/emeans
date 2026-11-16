@@ -76,7 +76,7 @@ fi
 - **OS / Kernel**: Ubuntu 24.04.5 LTS, Linux `6.8.0-147-generic` x86_64
 - **CPU / RAM**: AMD Ryzen Threadripper PRO 9985WX (64C/128T), `1.0 TiB` RAM (`989 GiB` avail)
 - **GPUs**: 4x NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition (`97,887 MiB` each), Driver `620.70.06`
-- **Disk**: `/` `2.3T` avail; `/home` `451G` avail (88% full — keep massive scratch files off `/home` on `foureyes`)
+- **Disk**: `/` `2.2T` avail; `/home` `445G` avail — **store all `emeans` data, smoke/fuzz runs, `TMPDIR`, and `TRITON_CACHE_DIR` strictly under `/home/catid/...` (`/home/catid/.cache/emeans_tmp`), never on `/`, `/tmp`, or `/var/tmp`**
 - **Env**: `/home/catid/emeans/.venv/bin/python` (`Python 3.12.3`, `torch 2.14.1+cu130`, `triton 3.8.0`, `faiss-cpu 1.16.0`), `uv 0.13.5`, `tmux 3.4`
 
 ### 4.2 `ripper` — **REMOTE LAN (`10.10.0.161`)**
@@ -129,6 +129,7 @@ fi
 > 2. **NEVER** touch `walnut.stratabaremetal.com` (strictly off-limits).
 > 3. Always export the live `SSH_AUTH_SOCK` before connecting (Section 3.2), and prepend `export PATH="$HOME/.local/bin:/usr/local/cuda/bin:$PATH"` inside remote commands so `uv` and `nvcc` are found.
 > 4. Use `uv venv .venv --python 3.12` so Ubuntu 24.04 (`3.12.3`) and Ubuntu 26.04 (`3.14.4` system default on `acorn`/`cashew`) both standardize on Python 3.12 wheels (`torch 2.14.1+cu130`, `triton 3.8.0`, `faiss-cpu 1.16.0`).
+> 5. **Store ALL Data, Caches, and Scratch Files on `/home` (NEVER `/`, `/tmp`, or `/var/tmp`)**: Root `/` disks on servers are OS partitions not meant for data or Triton caches. On remote servers (`ripper`, `loki`, `work`, `acorn.stratabaremetal.com`, `cashew.stratabaremetal.com`), put all envs/datasets under `/home/catid/emeans_env/...` (`TMPDIR=/home/catid/emeans_env/tmp`, `TRITON_CACHE_DIR=/home/catid/emeans_env/tmp/triton_cache_${SESSION}`). On local `foureyes`, put all scratch/smoke/fuzz files and `TRITON_CACHE_DIR` under `/home/catid/.cache/emeans_tmp/...`. Never delete `/tmp/ssh-*`, `/tmp/tmux-*`, or non-`emeans` files.
 
 ### Step 1: Sync Workspace & Bootstrap `.venv` on `cashew.stratabaremetal.com` (or Any Approved Host)
 ```bash
@@ -147,10 +148,11 @@ rsync -az --delete \
   --exclude '.pytest_cache/' \
   /home/catid/emeans/ "${HOST}:~/emeans/"
 
-# 2. Create/update Python 3.12 .venv via uv
+# 2. Create/update Python 3.12 .venv + /home scratch/data dirs via uv
 ssh -A -o BatchMode=yes -o ConnectTimeout=5 "${HOST}" '
   set -euo pipefail
   export PATH="$HOME/.local/bin:/usr/local/cuda/bin:$PATH"
+  mkdir -p /home/catid/emeans_env/tmp /home/catid/emeans_env/data
   cd ~/emeans
   if [ ! -x .venv/bin/python ]; then
     uv venv .venv --python 3.12
@@ -170,11 +172,13 @@ GPU_IDS=0                        # 0..1 on cashew, acorn, work, loki; 0..3 on ri
 
 ssh -A -o BatchMode=yes -o ConnectTimeout=5 "${HOST}" "
   set -euo pipefail
-  mkdir -p ~/emeans/outputs/logs
+  mkdir -p ~/emeans/outputs/logs /home/catid/emeans_env/tmp
   tmux kill-session -t ${SESSION} 2>/dev/null || true
   tmux new-session -d -s ${SESSION} \"bash -lc '
     export PATH=\\\"\\\$HOME/.local/bin:/usr/local/cuda/bin:\\\$PATH\\\"
     export CUDA_VISIBLE_DEVICES=${GPU_IDS}
+    export TMPDIR=/home/catid/emeans_env/tmp
+    export TRITON_CACHE_DIR=/home/catid/emeans_env/tmp/triton_cache_${SESSION}
     cd ~/emeans
     .venv/bin/python scripts/run_phase2_opt.py 2>&1 | tee outputs/logs/${SESSION}.log
     echo EXIT_CODE=\\\${PIPESTATUS[0]} >> outputs/logs/${SESSION}.status

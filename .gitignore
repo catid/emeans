@@ -16,6 +16,7 @@ dist/
 wheels/
 
 # Test, lint & typecheck caches
+.cache/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
@@ -35,6 +36,7 @@ outputs/**/data/
 outputs/**/logs/
 outputs/**/shards/
 *.npz
+*.npy
 *.pth
 *.pt
 *.fvecs
