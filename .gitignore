@@ -29,12 +29,23 @@ htmlcov/
 *.swp
 *.log
 
-# Dataset caches, checkpoints & raw per-worker shard dumps
+# Dataset caches, raw corpora, checkpoints & raw per-worker shard dumps
 outputs/**/cache/
+outputs/**/data/
+outputs/**/logs/
 outputs/**/shards/
 *.npz
 *.pth
 *.pt
+*.fvecs
+*.ivecs
+*.bvecs
+*.hdf5
+*.h5
+*.parquet
+*.tar.gz
+*.tgz
+*.zip
 
 # OS metadata
 .DS_Store
